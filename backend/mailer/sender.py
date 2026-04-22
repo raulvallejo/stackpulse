@@ -1,6 +1,7 @@
 import logging
 import os
 
+import markdown
 import resend
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -12,7 +13,13 @@ _SUBJECT = "StackPulse — Your Weekly Dev Digest"
 def send_digest(digest: str, recipient: str) -> bool:
     try:
         resend.api_key = os.environ.get("RESEND_API_KEY", "")
-        html = f"<pre>{digest}</pre>"
+        html = f"""
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333;">
+{markdown.markdown(digest, extensions=['extra'])}
+</body>
+</html>
+"""
         resend.Emails.send({
             "from": "StackPulse <onboarding@resend.dev>",
             "to": [recipient],
