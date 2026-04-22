@@ -118,6 +118,7 @@ digests (
 ## Environment Variables
 
 ```
+ANTHROPIC_API_KEY
 GROQ_API_KEY
 OPENAI_API_KEY
 OPIK_API_KEY
@@ -181,7 +182,9 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 
 ### Groq
 - Model name is `"llama-3.3-70b-versatile"` not `"llama-3.3-70b"`
-- `llama-3.1-8b-instant` filters too aggressively — returned empty results for all sources. Switched all nodes to Claude Haiku for consistent quality. Score improved from 0.62 to 0.87.
+- `llama-3.1-8b-instant` filters too aggressively — returned empty results for all sources. Switched all nodes to Claude Haiku 4.5 for consistent quality. Score improved from 0.62 to 0.87.
+- Free tier has a 100,000 tokens per day (TPD) limit. During development, running the pipeline multiple times burns through this quickly. In production (weekly runs) this is not an issue.
+- All 3 nodes (filter, synthesize, score) now use Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) via Anthropic API. Groq is kept as a monitored source but no longer used as LLM provider.
 
 ### GitHub API
 - Always load `GITHUB_TOKEN` from env — unauthenticated requests limited to 60/hour

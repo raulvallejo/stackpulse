@@ -2,7 +2,7 @@
 
 **Your dev stack, monitored. Weekly digest, delivered.**
 
-StackPulse is an AI agent that monitors the APIs and developer tools you build on, detects breaking changes, new endpoints, and deprecations, and delivers a personalized weekly email digest. Built with LangGraph, Groq, and OPIK.
+StackPulse is an AI agent that monitors the APIs and developer tools you build on, detects breaking changes, new endpoints, and deprecations, and delivers a personalized weekly email digest. Built with LangGraph, Anthropic Claude, and OPIK.
 
 ---
 
@@ -58,7 +58,25 @@ load_sources → fetch_all → filter → synthesize → score → send_email
 
 ## Setup
 
-_Coming soon._
+### Environment Variables
+
+Create a `.env` file in the `backend/` directory with:
+
+```
+ANTHROPIC_API_KEY=
+GROQ_API_KEY=
+OPIK_API_KEY=
+OPIK_PROJECT_NAME=stackpulse
+OPIK_WORKSPACE=
+PINECONE_API_KEY=
+PINECONE_INDEX_NAME=stackpulse
+SUPABASE_URL=
+SUPABASE_KEY=
+RESEND_API_KEY=
+GITHUB_TOKEN=
+RECIPIENT_EMAIL=
+USER_INTERESTS=
+```
 
 ---
 
