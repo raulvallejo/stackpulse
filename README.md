@@ -44,11 +44,15 @@ load_sources → fetch_all → filter → synthesize → score → send_email
 ## Roadmap
 
 | Version | Scope |
-|---|---|
-| v1 | Personal use, 1 user |
-| v1.1 | Memory layer with Mem0 |
-| v1.2 | Human-in-the-loop for breaking changes |
-| v2 | Multi-user, sign-up form, Supabase auth |
+|---------|-------|
+| v1 | Personal use, 1 user, hardcoded config. LangGraph pipeline, OPIK tracing, prompts in Prompt Library, Resend email, Render Cron Job |
+| v1.1 | Observability depth — cost tracking, latency per node, quality scores over time, alerts |
+| v1.2 | Evals — LLM-as-judge rubrics in OPIK, baseline scores, regression detection |
+| v1.3 | Guardrails — input/output validation, hallucination checks, OWASP LLM Top 10 mapped |
+| v1.4 | Memory with Mem0 — never repeat same update, personalization improves over time |
+| v1.5 | Human-in-the-loop — breaking changes trigger immediate alert, LangGraph interrupt pattern |
+| v2 | Multi-user — Supabase auth, sign-up form, per-user source configuration, per-user digest personalization |
+| v3 | Full product — dashboard, digest history, source management UI |
 
 ---
 
