@@ -15,7 +15,7 @@ Pipeline: fetch updates from RSS feeds, GitHub Releases API, and changelog pages
 | Layer | Technology |
 |---|---|
 | Orchestration | LangGraph |
-| LLM | Groq `llama-3.3-70b` |
+| LLM | Claude Haiku 4.5 `claude-haiku-4-5-20251001` (filter + synthesize + score) |
 | Embeddings | OpenAI `text-embedding-3-small` (v2) |
 | Vector store | Pinecone (v2) |
 | Database + auth | Supabase |
@@ -181,6 +181,7 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 
 ### Groq
 - Model name is `"llama-3.3-70b-versatile"` not `"llama-3.3-70b"`
+- `llama-3.1-8b-instant` filters too aggressively — returned empty results for all sources. Switched all nodes to Claude Haiku for consistent quality. Score improved from 0.62 to 0.87.
 
 ### GitHub API
 - Always load `GITHUB_TOKEN` from env — unauthenticated requests limited to 60/hour

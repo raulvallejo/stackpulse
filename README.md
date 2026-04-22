@@ -32,7 +32,7 @@ load_sources → fetch_all → filter → synthesize → score → send_email
 | Layer | Technology |
 |---|---|
 | Orchestration | LangGraph |
-| LLM | Groq |
+| LLM | Claude Haiku 4.5 (filter + synthesis + scoring) |
 | Email delivery | Resend |
 | Database + auth | Supabase |
 | Observability | OPIK |

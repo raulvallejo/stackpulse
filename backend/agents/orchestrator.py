@@ -75,13 +75,21 @@ def filter_updates(state: StackPulseState) -> StackPulseState:
             user_interests=state["user_interests"],
         )
         try:
-            response = llm_filter.invoke(prompt_text)
-            parsed = json.loads(response.content)
+            response = llm_quality.invoke(prompt_text)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = raw[0].text if hasattr(raw[0], 'text') else str(raw[0])
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
+            parsed = json.loads(raw)
             if parsed:
                 filtered[name] = parsed
         except Exception:
             pass
-        time.sleep(5)
     state["filtered_updates"] = filtered
     return state
 
