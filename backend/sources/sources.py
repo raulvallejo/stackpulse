@@ -51,8 +51,8 @@ _SOURCES = [
     },
     {
         "name": "Pinecone",
-        "changelog_url": "https://docs.pinecone.io/changelog",
-        "github_repo": None,
+        "changelog_url": "https://docs.pinecone.io/release-notes",
+        "github_repo": "pinecone-io/pinecone-python-client",
         "rss_url": None,
         "why_interested": (
             "Vector store for RAG and memory. API changes, new index features, and pricing changes "
