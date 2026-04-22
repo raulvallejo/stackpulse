@@ -3,9 +3,11 @@ load_dotenv()
 
 import json
 import os
+import time
 from typing import TypedDict
 
 import opik
+from langchain_anthropic import ChatAnthropic
 from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
 
@@ -27,7 +29,8 @@ filter_prompt = opik_client.get_prompt(name="stackpulse-filter", project_name="s
 synthesize_prompt = opik_client.get_prompt(name="stackpulse-synthesize", project_name="stackpulse")
 score_prompt = opik_client.get_prompt(name="stackpulse-score", project_name="stackpulse")
 
-llm = ChatGroq(model="llama-3.3-70b-versatile")
+llm_filter = ChatGroq(model="llama-3.1-8b-instant", groq_api_key=os.environ.get("GROQ_API_KEY", ""))
+llm_quality = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 
 class StackPulseState(TypedDict):
@@ -62,19 +65,23 @@ def filter_updates(state: StackPulseState) -> StackPulseState:
     for source in state["sources"]:
         name = source["name"]
         updates = state["raw_updates"].get(name, [])
+        updates_str = json.dumps(updates)
+        if len(updates_str) > 8000:
+            updates_str = updates_str[:8000]
         prompt_text = filter_prompt.format(
             source_name=name,
             why_interested=source.get("why_interested", ""),
-            updates=json.dumps(updates),
+            updates=updates_str,
             user_interests=state["user_interests"],
         )
         try:
-            response = llm.invoke(prompt_text)
+            response = llm_filter.invoke(prompt_text)
             parsed = json.loads(response.content)
             if parsed:
                 filtered[name] = parsed
         except Exception:
             pass
+        time.sleep(5)
     state["filtered_updates"] = filtered
     return state
 
@@ -85,7 +92,7 @@ def synthesize(state: StackPulseState) -> StackPulseState:
         user_interests=state["user_interests"],
         filtered_updates=json.dumps(state["filtered_updates"]),
     )
-    response = llm.invoke(prompt_text)
+    response = llm_quality.invoke(prompt_text)
     state["digest"] = response.content
     return state
 
@@ -96,8 +103,18 @@ def score_digest(state: StackPulseState) -> StackPulseState:
         user_interests=state["user_interests"],
         digest=state["digest"],
     )
-    response = llm.invoke(prompt_text)
-    parsed = json.loads(response.content)
+    response = llm_quality.invoke(prompt_text)
+    raw = response.content
+    if isinstance(raw, list):
+        raw = raw[0].text if hasattr(raw[0], 'text') else str(raw[0])
+    # Strip markdown code fences if present
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+    parsed = json.loads(raw)
     state["quality_score"] = parsed.get("score", 0.0)
     state["quality_breakdown"] = parsed.get("breakdown", {})
     state["should_send"] = state["quality_score"] >= 0.6
