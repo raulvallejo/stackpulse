@@ -1,0 +1,15 @@
+langgraph
+langchain-groq
+langchain-anthropic
+langchain-core
+anthropic
+groq
+supabase
+resend
+opik
+python-dotenv
+requests
+beautifulsoup4
+feedparser
+PyGithub
+markdown
