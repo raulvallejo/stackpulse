@@ -7,7 +7,7 @@ import resend
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-_SUBJECT = "StackPulse — Your Weekly Dev Digest"
+_SUBJECT = "StackPulse — Your Weekly Dev Stack Digest"
 
 
 def send_digest(digest: str, recipient: str) -> bool:

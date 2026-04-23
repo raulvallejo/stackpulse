@@ -2,18 +2,22 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import json
+import logging
+import operator
 import os
-import time
-from typing import TypedDict
+from typing import Annotated, TypedDict
 
 import opik
 from langchain_anthropic import ChatAnthropic
-from langchain_groq import ChatGroq
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 
-from agents.fetcher import fetch_all_sources
+from agents.fetcher import SourceAgentState, source_agent
 from mailer.sender import send_digest
 from sources.sources import get_sources
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger(__name__)
 
 
 def _safe_track(*args, **kwargs):
@@ -25,97 +29,80 @@ def _safe_track(*args, **kwargs):
 
 
 opik_client = opik.Opik()
-filter_prompt = opik_client.get_prompt(name="stackpulse-filter", project_name="stackpulse")
 synthesize_prompt = opik_client.get_prompt(name="stackpulse-synthesize", project_name="stackpulse")
 score_prompt = opik_client.get_prompt(name="stackpulse-score", project_name="stackpulse")
 
-llm_filter = ChatGroq(model="llama-3.1-8b-instant", groq_api_key=os.environ.get("GROQ_API_KEY", ""))
-llm_quality = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+llm = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
 
-class StackPulseState(TypedDict):
+class OrchestratorState(TypedDict):
     sources: list[dict]
-    raw_updates: dict[str, list[dict]]
-    filtered_updates: dict[str, list[dict]]
+    user_interests: str
+    recipient_email: str
+    source_results: Annotated[list[dict], operator.add]
     digest: str
     quality_score: float
     quality_breakdown: dict
     should_send: bool
-    recipient_email: str
-    user_interests: str
 
 
 @_safe_track
-def load_sources(state: StackPulseState) -> StackPulseState:
+def load_config(state: OrchestratorState) -> OrchestratorState:
     state["sources"] = get_sources()
-    state["recipient_email"] = os.environ.get("RECIPIENT_EMAIL", "")
     state["user_interests"] = os.environ.get("USER_INTERESTS", "")
+    state["recipient_email"] = os.environ.get("RECIPIENT_EMAIL", "")
     return state
 
 
-@_safe_track
-def fetch_all(state: StackPulseState) -> StackPulseState:
-    state["raw_updates"] = fetch_all_sources()
-    return state
+def dispatch_sources(state: OrchestratorState) -> list[Send]:
+    return [
+        Send("run_source_agent", {
+            "source": s,
+            "user_interests": state["user_interests"],
+            "raw_updates": [],
+            "filtered_updates": [],
+            "error": None,
+        })
+        for s in state["sources"]
+    ]
 
 
 @_safe_track
-def filter_updates(state: StackPulseState) -> StackPulseState:
-    filtered = {}
-    for source in state["sources"]:
-        name = source["name"]
-        updates = state["raw_updates"].get(name, [])
-        updates_str = json.dumps(updates)
-        if len(updates_str) > 8000:
-            updates_str = updates_str[:8000]
-        prompt_text = filter_prompt.format(
-            source_name=name,
-            why_interested=source.get("why_interested", ""),
-            updates=updates_str,
-            user_interests=state["user_interests"],
-        )
-        try:
-            response = llm_quality.invoke(prompt_text)
-            raw = response.content
-            if isinstance(raw, list):
-                raw = raw[0].text if hasattr(raw[0], 'text') else str(raw[0])
-            raw = raw.strip()
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-            raw = raw.strip()
-            parsed = json.loads(raw)
-            if parsed:
-                filtered[name] = parsed
-        except Exception:
-            pass
-    state["filtered_updates"] = filtered
-    return state
+def run_source_agent(state: SourceAgentState) -> dict:
+    result = source_agent.invoke(state)
+    return {
+        "source_results": [{
+            "source": state["source"]["name"],
+            "filtered_updates": result["filtered_updates"],
+        }]
+    }
 
 
 @_safe_track
-def synthesize(state: StackPulseState) -> StackPulseState:
+def synthesize(state: OrchestratorState) -> OrchestratorState:
+    filtered = {r["source"]: r["filtered_updates"] for r in state["source_results"]}
     prompt_text = synthesize_prompt.format(
         user_interests=state["user_interests"],
-        filtered_updates=json.dumps(state["filtered_updates"]),
+        filtered_updates=json.dumps(filtered),
     )
-    response = llm_quality.invoke(prompt_text)
-    state["digest"] = response.content
+    response = llm.invoke(prompt_text)
+    raw = response.content
+    if isinstance(raw, list):
+        raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
+    state["digest"] = raw
     return state
 
 
 @_safe_track
-def score_digest(state: StackPulseState) -> StackPulseState:
+def score_digest(state: OrchestratorState) -> OrchestratorState:
     prompt_text = score_prompt.format(
         user_interests=state["user_interests"],
         digest=state["digest"],
     )
-    response = llm_quality.invoke(prompt_text)
+    response = llm.invoke(prompt_text)
     raw = response.content
     if isinstance(raw, list):
-        raw = raw[0].text if hasattr(raw[0], 'text') else str(raw[0])
-    # Strip markdown code fences if present
+        raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
     raw = raw.strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -130,26 +117,24 @@ def score_digest(state: StackPulseState) -> StackPulseState:
 
 
 @_safe_track
-def send_email(state: StackPulseState) -> StackPulseState:
+def send_email(state: OrchestratorState) -> OrchestratorState:
     if not state["should_send"]:
-        print(f"Digest score {state['quality_score']:.2f} below threshold — email not sent.")
+        logger.info("Digest score %.2f below threshold — email not sent.", state["quality_score"])
         return state
     send_digest(digest=state["digest"], recipient=state["recipient_email"])
     return state
 
 
-_graph = StateGraph(StackPulseState)
-_graph.add_node("load_sources", load_sources)
-_graph.add_node("fetch_all", fetch_all)
-_graph.add_node("filter_updates", filter_updates)
+_graph = StateGraph(OrchestratorState)
+_graph.add_node("load_config", load_config)
+_graph.add_node("run_source_agent", run_source_agent)
 _graph.add_node("synthesize", synthesize)
 _graph.add_node("score_digest", score_digest)
 _graph.add_node("send_email", send_email)
 
-_graph.add_edge(START, "load_sources")
-_graph.add_edge("load_sources", "fetch_all")
-_graph.add_edge("fetch_all", "filter_updates")
-_graph.add_edge("filter_updates", "synthesize")
+_graph.add_edge(START, "load_config")
+_graph.add_conditional_edges("load_config", dispatch_sources, ["run_source_agent"])
+_graph.add_edge("run_source_agent", "synthesize")
 _graph.add_edge("synthesize", "score_digest")
 _graph.add_edge("score_digest", "send_email")
 _graph.add_edge("send_email", END)

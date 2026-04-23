@@ -1,18 +1,46 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+import json
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from typing import TypedDict
 
 import feedparser
+import opik
 import requests
 from bs4 import BeautifulSoup
-
-from sources.sources import get_sources
+from langchain_anthropic import ChatAnthropic
+from langgraph.graph import END, START, StateGraph
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 7
 _CHANGELOG_MAX_CHARS = 3000
+
+
+def _safe_track(*args, **kwargs):
+    try:
+        return opik.track(*args, **kwargs)
+    except Exception:
+        def noop(fn): return fn
+        return noop
+
+
+opik_client = opik.Opik()
+filter_prompt = opik_client.get_prompt(name="stackpulse-filter", project_name="stackpulse")
+
+llm = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+
+class SourceAgentState(TypedDict):
+    source: dict
+    user_interests: str
+    raw_updates: list[dict]
+    filtered_updates: list[dict]
+    error: str | None
 
 
 def _cutoff() -> datetime:
@@ -24,7 +52,6 @@ def _parse_dt(value) -> datetime | None:
         return None
     if isinstance(value, datetime):
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    # feedparser time_struct
     try:
         import time
         ts = time.mktime(value)
@@ -98,37 +125,83 @@ def _fetch_changelog(source: dict) -> list[dict]:
     }]
 
 
-def fetch_source(source: dict) -> list[dict]:
+@_safe_track
+def fetch_source_node(state: SourceAgentState) -> SourceAgentState:
+    source = state["source"]
+    state["error"] = state.get("error")
+
     try:
         if source.get("rss_url"):
-            results = _fetch_rss(source)
-            logger.info("Fetched %s via RSS", source["name"])
-            return results
-    except Exception as exc:
-        logger.warning("RSS fetch failed for %s: %s", source["name"], exc)
+            try:
+                state["raw_updates"] = _fetch_rss(source)
+                logger.info("Fetched %s via RSS", source["name"])
+                return state
+            except Exception as exc:
+                logger.warning("RSS fetch failed for %s: %s", source["name"], exc)
 
-    try:
         if source.get("github_repo"):
-            results = _fetch_github(source)
-            logger.info("Fetched %s via GitHub Releases", source["name"])
-            return results
-    except Exception as exc:
-        logger.warning("GitHub fetch failed for %s: %s", source["name"], exc)
+            try:
+                state["raw_updates"] = _fetch_github(source)
+                logger.info("Fetched %s via GitHub Releases", source["name"])
+                return state
+            except Exception as exc:
+                logger.warning("GitHub fetch failed for %s: %s", source["name"], exc)
 
-    try:
         if source.get("changelog_url"):
-            results = _fetch_changelog(source)
-            logger.info("Fetched %s via changelog page", source["name"])
-            return results
+            try:
+                state["raw_updates"] = _fetch_changelog(source)
+                logger.info("Fetched %s via changelog page", source["name"])
+                return state
+            except Exception as exc:
+                logger.warning("Changelog fetch failed for %s: %s", source["name"], exc)
+
+        state["raw_updates"] = []
     except Exception as exc:
-        logger.warning("Changelog fetch failed for %s: %s", source["name"], exc)
+        logger.error("fetch_source_node failed for %s: %s", source.get("name", "?"), exc)
+        state["error"] = str(exc)
+        state["raw_updates"] = []
 
-    return []
+    return state
 
 
-def fetch_all_sources() -> dict[str, list[dict]]:
-    results = {}
-    for source in get_sources():
-        print(f"Fetching {source['name']}...")
-        results[source["name"]] = fetch_source(source)
-    return results
+@_safe_track
+def filter_source_node(state: SourceAgentState) -> SourceAgentState:
+    try:
+        source = state["source"]
+        updates_str = json.dumps(state.get("raw_updates", []))
+        if len(updates_str) > 8000:
+            updates_str = updates_str[:8000]
+
+        prompt_text = filter_prompt.format(
+            source_name=source["name"],
+            why_interested=source.get("why_interested", ""),
+            updates=updates_str,
+            user_interests=state["user_interests"],
+        )
+
+        response = llm.invoke(prompt_text)
+        raw = response.content
+        if isinstance(raw, list):
+            raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+        state["filtered_updates"] = json.loads(raw)
+    except Exception as exc:
+        logger.warning("filter_source_node failed for %s: %s", state["source"].get("name", "?"), exc)
+        state["filtered_updates"] = []
+
+    return state
+
+
+_graph = StateGraph(SourceAgentState)
+_graph.add_node("fetch_source_node", fetch_source_node)
+_graph.add_node("filter_source_node", filter_source_node)
+_graph.add_edge(START, "fetch_source_node")
+_graph.add_edge("fetch_source_node", "filter_source_node")
+_graph.add_edge("filter_source_node", END)
+
+source_agent = _graph.compile()
