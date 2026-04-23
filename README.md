@@ -8,10 +8,14 @@ StackPulse is an AI agent that monitors the APIs and developer tools you build o
 
 ## How It Works
 
-Every Monday at 8am, StackPulse fetches updates from 8 developer tools via RSS feeds, GitHub Releases API, and changelog pages. An LLM filters what actually matters, synthesizes a digest, scores it for quality, and delivers it to your inbox.
+Every Monday at 8am, an Orchestrator Agent uses LangGraph's Send API to dispatch one Source Agent per tool in parallel. Each Source Agent fetches updates (RSS / GitHub Releases / changelog scraping) and filters them with Claude Haiku. Results are accumulated and passed to a Synthesis Agent that writes the digest, a Quality Agent that scores it with LLM-as-judge, and a Delivery Agent that sends it via Resend.
 
 ```
-load_sources → fetch_all → filter → synthesize → score → send_email
+Orchestrator
+  └─ load_config → dispatch (Send API, parallel)
+       ├─ Source Agent × 8  (fetch → filter)
+            ↓
+       synthesize → score → send_email
 ```
 
 ### Sources Monitored

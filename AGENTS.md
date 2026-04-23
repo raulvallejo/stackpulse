@@ -14,7 +14,7 @@ Pipeline: fetch updates from RSS feeds, GitHub Releases API, and changelog pages
 
 | Layer | Technology |
 |---|---|
-| Orchestration | LangGraph |
+| Orchestration | LangGraph + LangGraph Send API for parallel agent dispatch |
 | LLM | Claude Haiku 4.5 `claude-haiku-4-5-20251001` (filter + synthesize + score) |
 | Embeddings | OpenAI `text-embedding-3-small` (v2) |
 | Vector store | Pinecone (v2) |
@@ -29,20 +29,33 @@ Pipeline: fetch updates from RSS feeds, GitHub Releases API, and changelog pages
 
 ## Architecture
 
-LangGraph graph — node execution order:
+Multi-agent system built with LangGraph. The orchestrator uses the Send API to dispatch one Source Agent per source in parallel, then passes aggregated results through synthesis, scoring, and delivery.
 
 ```
-load_sources → fetch_all (parallel) → filter → synthesize → score → send_email
+Orchestrator
+  └─ load_config → dispatch_sources (Send API)
+       ├─ Source Agent [Anthropic]  (fetch → filter)
+       ├─ Source Agent [Groq]       (fetch → filter)
+       ├─ Source Agent [OPIK]       (fetch → filter)
+       ├─ Source Agent [LangChain]  (fetch → filter)
+       ├─ Source Agent [LangGraph]  (fetch → filter)
+       ├─ Source Agent [Pinecone]   (fetch → filter)
+       ├─ Source Agent [Tavily]     (fetch → filter)
+       └─ Source Agent [MCP]        (fetch → filter)
+            ↓ (all results accumulated via operator.add)
+       synthesize → score → send_email
 ```
 
-- **load_sources** — reads source definitions from config/DB into graph state
-- **fetch_all** — fans out to all sources in parallel, each via `fetch_source()`
-- **filter** — LLM pass to keep only meaningful changes per source
-- **synthesize** — LLM pass to write the unified weekly digest
-- **score** — LLM-as-judge scores digest quality before sending
-- **send_email** — delivers final digest via Resend
+### Agents
 
-Graph state must be typed with `TypedDict`.
+- **Orchestrator** (`agents/orchestrator.py`) — supervisor graph. Loads config, uses `Send` API to fan out to parallel Source Agents, then runs synthesis → scoring → delivery.
+- **Source Agent** (`agents/fetcher.py`) — one instance per source, runs in parallel. Two-node LangGraph: `fetch_source_node` → `filter_source_node`. Fetches via RSS / GitHub Releases / changelog scraping, then filters with Claude Haiku.
+- **Synthesis Agent** (node inside orchestrator) — combines all source results into a unified digest with Claude Haiku.
+- **Quality Agent** (node inside orchestrator) — LLM-as-judge scores the digest before sending. Threshold: 0.6.
+- **Delivery Agent** (node inside orchestrator) — sends final digest via Resend if quality threshold is met.
+- **Breaking Change Agent** *(coming next iteration)* — separate daily cron job for immediate alerts on breaking changes.
+
+All graph states typed with `TypedDict`.
 
 ---
 
@@ -179,6 +192,9 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 
 ### LangGraph
 - Always define state with `TypedDict` — never use plain dict
+- **Send API dispatch**: `dispatch_sources` must be a conditional edge, not a node — wire it with `add_conditional_edges("load_config", dispatch_sources, ["run_source_agent"])`. Using `add_node` instead silently breaks fan-out.
+- **Parallel result accumulation**: use `Annotated[list[dict], operator.add]` on accumulator fields (e.g. `source_results`) so each parallel agent's return is merged by concatenation, not overwritten.
+- **Partial state returns from Send nodes**: `run_source_agent` returns only `{"source_results": [...]}`, not the full `OrchestratorState`. Nodes dispatched via `Send` should only write back the fields they own.
 
 ### Groq
 - Model name is `"llama-3.3-70b-versatile"` not `"llama-3.3-70b"`
