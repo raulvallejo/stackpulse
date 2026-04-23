@@ -79,6 +79,16 @@ _SOURCES = [
             "options affect  compatibility."
         ),
     },
+    {
+        "name": "Lingo.dev",
+        "changelog_url": "https://lingo.dev/en/changelog",
+        "github_repo": "lingodotdev/lingo.dev",
+        "rss_url": None,
+        "why_interested": (
+            "AI-powered localization toolkit. New LLM integrations, CLI changes, MCP updates, and "
+            "API changes affect developers building multilingual AI applications."
+        ),
+    },
 ]
 
 
