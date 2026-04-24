@@ -89,6 +89,78 @@ _SOURCES = [
             "API changes affect developers building multilingual AI applications."
         ),
     },
+    {
+        "name": "Resend",
+        "changelog_url": None,
+        "github_repo": "resend/resend-python",
+        "rss_url": None,
+        "why_interested": (
+            "Email delivery API I use in production for some of my agents like StackPulse. SDK changes, "
+            "rate limit updates, and new features directly affect my agent email delivery pipeline."
+        ),
+    },
+    {
+        "name": "Mem0",
+        "changelog_url": None,
+        "github_repo": "mem0ai/mem0",
+        "rss_url": None,
+        "why_interested": (
+            "Agent memory layer I'm planning to integrate. New memory patterns, SDK updates, and API "
+            "changes directly affect how my agents persist and retrieve context across sessions."
+        ),
+    },
+    {
+        "name": "Supabase",
+        "changelog_url": None,
+        "github_repo": "supabase/supabase",
+        "rss_url": None,
+        "why_interested": (
+            "Database and auth platform I'm using for some of my agents (eg StackPulse). SDK updates, "
+            "auth changes, and new features affect my multi-user architecture."
+        ),
+    },
+    {
+        "name": "Make",
+        "changelog_url": "https://help.make.com/release-notes",
+        "github_repo": None,
+        "rss_url": None,
+        "why_interested": (
+            "Automation platform with AI Agents and MCP servers. New agent capabilities, scenario API "
+            "changes, and MCP updates affect how I build and integrate automation workflows."
+        ),
+    },
+    {
+        "name": "Typeform",
+        "changelog_url": "https://help.typeform.com/hc/en-us/articles/29035269414036-Changelog",
+        "github_repo": "Typeform/js-api-client",
+        "rss_url": None,
+        "why_interested": (
+            "Form and survey platform I use for data collection in agent workflows (specially as UI entry "
+            "point in some of my built solutions). API changes, webhook updates, and new integrations "
+            "affect how data flows into my pipelines."
+        ),
+    },
+    {
+        "name": "Miro",
+        "changelog_url": "https://developers.miro.com/changelog",
+        "github_repo": None,
+        "rss_url": None,
+        "why_interested": (
+            "Collaborative whiteboard platform with REST API and MCP server. New developer tools and MCP "
+            "updates affect how AI agents interact with visual collaboration workflows. Also everything "
+            "related to API and SDK."
+        ),
+    },
+    {
+        "name": "Celonis",
+        "changelog_url": "https://developer.celonis.com/changelog/",
+        "github_repo": None,
+        "rss_url": None,
+        "why_interested": (
+            "Process mining platform I work with daily. API changes, new MCP server capabilities, and "
+            "agentic features directly affect my developer platform work."
+        ),
+    },
 ]
 
 
