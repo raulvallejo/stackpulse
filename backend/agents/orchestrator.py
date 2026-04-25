@@ -166,25 +166,55 @@ def run_pipeline():
             trace_id = trace_data.id
 
             # Log quality score as feedback score
+            breakdown = result.get("quality_breakdown", {})
             opik_client.log_traces_feedback_scores(
                 scores=[
                     {
                         "id": trace_id,
                         "name": "quality_score",
                         "value": score,
-                        "reason": str(result.get("quality_breakdown", {}).get("reason", ""))
+                        "reason": str(breakdown.get("reason", ""))
                     },
                     {
                         "id": trace_id,
                         "name": "estimated_cost_usd",
                         "value": round((_run_metrics["input_tokens"] * 0.80 + _run_metrics["output_tokens"] * 4.00) / 1_000_000, 6),
                         "reason": f"input: {_run_metrics['input_tokens']} tokens, output: {_run_metrics['output_tokens']} tokens"
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "relevance",
+                        "value": float(breakdown.get("relevance", 0.0)),
+                        "reason": "Relevance to user interests"
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "actionability",
+                        "value": float(breakdown.get("actionability", 0.0)),
+                        "reason": "Actionability of digest content"
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "signal_to_noise",
+                        "value": float(breakdown.get("signal_to_noise", 0.0)),
+                        "reason": "Signal to noise ratio"
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "severity_accuracy",
+                        "value": float(breakdown.get("severity_accuracy", 0.0)),
+                        "reason": "Accuracy of severity classification"
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "timeliness",
+                        "value": float(breakdown.get("timeliness", 0.0)),
+                        "reason": "Timeliness of updates"
                     }
                 ]
             )
 
             # Log metadata
-            breakdown = result.get("quality_breakdown", {})
             opik_client.update_trace(
                 trace_id=trace_id,
                 project_name="stackpulse",
