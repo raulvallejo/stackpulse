@@ -83,9 +83,11 @@ def run_source_agent(state: SourceAgentState) -> dict:
 @_safe_track
 def synthesize(state: OrchestratorState) -> OrchestratorState:
     filtered = {r["source"]: r["filtered_updates"] for r in state["source_results"]}
+    all_sources_list = "\n".join([f"- {s['name']}" for s in state["sources"]])
     prompt_text = synthesize_prompt.format(
         user_interests=state["user_interests"],
         filtered_updates=json.dumps(filtered),
+        all_sources=all_sources_list
     )
     response = llm.invoke(prompt_text)
     if hasattr(response, 'response_metadata'):
