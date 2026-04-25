@@ -161,8 +161,8 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 
 | Version | Scope |
 |---|---|
-| v1 | Personal use, 1 user, hardcoded config |
-| v1.1 | Mem0 memory layer |
+| v1 ✅ | Core pipeline, OPIK tracing, Resend email, Render Cron Job |
+| v1.1 ✅ | Observability depth: quality score as OPIK feedback score, quality breakdown metadata, token usage + cost tracking, sources stats |
 | v1.2 | Human-in-the-loop review for breaking changes |
 | v2 | Multi-user, Supabase auth, sign-up form |
 
@@ -182,6 +182,8 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 - Never call `opik.configure()` — configure via env vars only (`OPIK_API_KEY`, `OPIK_PROJECT_NAME`, `OPIK_WORKSPACE`)
 - Use the `_safe_track` decorator pattern to avoid crashes if OPIK is unavailable
 - Get prompts from Prompt Library using `opik.Opik().get_prompt(name="...")` — never hardcode prompts in Python
+- `opik_client.update_trace()` requires `project_name` parameter: `opik_client.update_trace(trace_id=trace_id, project_name="stackpulse", metadata={...})`
+- `opik_client.log_traces_feedback_scores()` takes a list of score dicts: `[{"id": trace_id, "name": "quality_score", "value": score, "reason": "..."}]`
 
 ### Pinecone
 - `$contains` metadata filter not supported on free tier — use standard similarity search only
@@ -195,6 +197,10 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 - **Send API dispatch**: `dispatch_sources` must be a conditional edge, not a node — wire it with `add_conditional_edges("load_config", dispatch_sources, ["run_source_agent"])`. Using `add_node` instead silently breaks fan-out.
 - **Parallel result accumulation**: use `Annotated[list[dict], operator.add]` on accumulator fields (e.g. `source_results`) so each parallel agent's return is merged by concatenation, not overwritten.
 - **Partial state returns from Send nodes**: `run_source_agent` returns only `{"source_results": [...]}`, not the full `OrchestratorState`. Nodes dispatched via `Send` should only write back the fields they own.
+
+### Anthropic
+- Haiku rate limits with 16+ parallel source agents — use `threading.Semaphore(5)` in `filter_source_node` to limit concurrent calls
+- `sources_with_updates` count must check `len(filtered_updates) > 0`, not just truthiness
 
 ### Groq
 - Model name is `"llama-3.3-70b-versatile"` not `"llama-3.3-70b"`

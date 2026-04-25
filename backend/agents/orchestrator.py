@@ -34,6 +34,8 @@ score_prompt = opik_client.get_prompt(name="stackpulse-score", project_name="sta
 
 llm = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
 
+_run_metrics = {"input_tokens": 0, "output_tokens": 0}
+
 
 class OrchestratorState(TypedDict):
     sources: list[dict]
@@ -86,6 +88,10 @@ def synthesize(state: OrchestratorState) -> OrchestratorState:
         filtered_updates=json.dumps(filtered),
     )
     response = llm.invoke(prompt_text)
+    if hasattr(response, 'response_metadata'):
+        usage = response.response_metadata.get('usage', {})
+        _run_metrics["input_tokens"] += usage.get('input_tokens', 0)
+        _run_metrics["output_tokens"] += usage.get('output_tokens', 0)
     raw = response.content
     if isinstance(raw, list):
         raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
@@ -100,6 +106,10 @@ def score_digest(state: OrchestratorState) -> OrchestratorState:
         digest=state["digest"],
     )
     response = llm.invoke(prompt_text)
+    if hasattr(response, 'response_metadata'):
+        usage = response.response_metadata.get('usage', {})
+        _run_metrics["input_tokens"] += usage.get('input_tokens', 0)
+        _run_metrics["output_tokens"] += usage.get('output_tokens', 0)
     raw = response.content
     if isinstance(raw, list):
         raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
@@ -149,3 +159,41 @@ def run_pipeline():
     sent = result.get("should_send", False)
     print(f"Quality score: {score:.2f}")
     print(f"Email sent: {sent}")
+
+    try:
+        trace_data = opik.opik_context.get_current_trace_data()
+        if trace_data:
+            trace_id = trace_data.id
+
+            # Log quality score as feedback score
+            opik_client.log_traces_feedback_scores(
+                scores=[{
+                    "id": trace_id,
+                    "name": "quality_score",
+                    "value": score,
+                    "reason": str(result.get("quality_breakdown", {}).get("reason", ""))
+                }]
+            )
+
+            # Log metadata
+            breakdown = result.get("quality_breakdown", {})
+            opik_client.update_trace(
+                trace_id=trace_id,
+                project_name="stackpulse",
+                metadata={
+                    "quality_breakdown": breakdown,
+                    "input_tokens": _run_metrics["input_tokens"],
+                    "output_tokens": _run_metrics["output_tokens"],
+                    "estimated_cost_usd": round((_run_metrics["input_tokens"] * 0.80 + _run_metrics["output_tokens"] * 4.00) / 1_000_000, 6),
+                    "sources_checked": len(result.get("sources", [])),
+                    "sources_with_updates": len([r for r in result.get("source_results", []) if r.get("filtered_updates") and len(r.get("filtered_updates", [])) > 0]),
+                }
+            )
+
+        _run_metrics["input_tokens"] = 0
+        _run_metrics["output_tokens"] = 0
+
+    except Exception as e:
+        import traceback
+        print(f"Failed to log OPIK metadata: {e}")
+        traceback.print_exc()

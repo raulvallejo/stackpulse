@@ -7,6 +7,8 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
+import threading
+
 import feedparser
 import opik
 import requests
@@ -33,6 +35,8 @@ opik_client = opik.Opik()
 filter_prompt = opik_client.get_prompt(name="stackpulse-filter", project_name="stackpulse")
 
 llm = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+
+_anthropic_semaphore = threading.Semaphore(5)
 
 
 class SourceAgentState(TypedDict):
@@ -179,7 +183,8 @@ def filter_source_node(state: SourceAgentState) -> SourceAgentState:
             user_interests=state["user_interests"],
         )
 
-        response = llm.invoke(prompt_text)
+        with _anthropic_semaphore:
+            response = llm.invoke(prompt_text)
         raw = response.content
         if isinstance(raw, list):
             raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
