@@ -167,12 +167,20 @@ def run_pipeline():
 
             # Log quality score as feedback score
             opik_client.log_traces_feedback_scores(
-                scores=[{
-                    "id": trace_id,
-                    "name": "quality_score",
-                    "value": score,
-                    "reason": str(result.get("quality_breakdown", {}).get("reason", ""))
-                }]
+                scores=[
+                    {
+                        "id": trace_id,
+                        "name": "quality_score",
+                        "value": score,
+                        "reason": str(result.get("quality_breakdown", {}).get("reason", ""))
+                    },
+                    {
+                        "id": trace_id,
+                        "name": "estimated_cost_usd",
+                        "value": round((_run_metrics["input_tokens"] * 0.80 + _run_metrics["output_tokens"] * 4.00) / 1_000_000, 6),
+                        "reason": f"input: {_run_metrics['input_tokens']} tokens, output: {_run_metrics['output_tokens']} tokens"
+                    }
+                ]
             )
 
             # Log metadata
