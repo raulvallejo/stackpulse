@@ -18,23 +18,27 @@ supabase_client = create_client(
 def store_sent_updates(updates: list[dict], user_email: str) -> bool:
     try:
         rows = []
-        for update in updates:
-            if update.get("severity") == "breaking":
-                continue
-            rows.append({
-                "user_email": user_email,
-                "source": update.get("source", ""),
-                "title": update.get("title", ""),
-                "url": update.get("url", ""),
-                "severity": update.get("severity", ""),
-                "sent_at": datetime.now(timezone.utc).isoformat(),
-            })
-        if rows:
-            supabase_client.table("sent_updates").insert(rows).execute()
-        logger.info("Stored %d updates to memory for %s", len(rows), user_email)
+        for source_result in updates:
+            source_name = source_result.get("source", "")
+            for update in source_result.get("filtered_updates", []):
+                if update.get("severity") == "breaking":
+                    continue
+                rows.append({
+                    "user_email": user_email,
+                    "source": source_name,
+                    "title": update.get("title", ""),
+                    "url": update.get("url", ""),
+                    "severity": update.get("severity", "informational"),
+                    "sent_at": datetime.now(timezone.utc).isoformat()
+                })
+        if not rows:
+            logger.info("No non-breaking updates to store")
+            return True
+        supabase_client.table("sent_updates").insert(rows).execute()
+        logger.info(f"Stored {len(rows)} updates to memory for {user_email}")
         return True
     except Exception as e:
-        logger.error("Failed to store updates to memory: %s", e)
+        logger.error(f"Failed to store updates to memory: {e}")
         return False
 
 
@@ -57,18 +61,21 @@ def get_previously_sent(user_email: str, days: int = 7) -> list[str]:
 
 
 def filter_already_sent(source_results: list[dict], previously_sent_urls: list[str]) -> list[dict]:
-    sent_set = set(previously_sent_urls)
-    filtered_results = []
-    total_removed = 0
-
-    for result in source_results:
-        original = result.get("filtered_updates", [])
-        kept = [
-            u for u in original
-            if u.get("url") not in sent_set or u.get("severity") == "breaking"
-        ]
-        total_removed += len(original) - len(kept)
-        filtered_results.append({**result, "filtered_updates": kept})
-
-    logger.info("Memory filter removed %d already-seen updates", total_removed)
-    return filtered_results
+    if not previously_sent_urls:
+        return source_results
+    filtered_count = 0
+    for source_result in source_results:
+        original = source_result.get("filtered_updates", [])
+        kept = []
+        for update in original:
+            if update.get("severity") == "breaking":
+                kept.append(update)
+            elif update.get("url") and update.get("url") not in previously_sent_urls:
+                kept.append(update)
+            elif not update.get("url"):
+                kept.append(update)
+            else:
+                filtered_count += 1
+        source_result["filtered_updates"] = kept
+    logger.info(f"Memory filter removed {filtered_count} already-seen updates")
+    return source_results
