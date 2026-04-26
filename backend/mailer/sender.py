@@ -49,6 +49,8 @@ def send_digest(digest: str, recipient: str) -> bool:
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6;">
 {html_body}
+<hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0 10px;">
+<p style="font-size:12px;color:#9ca3af;text-align:center;margin:0;">Sent by <strong>StackPulse</strong> · Your dev stack, monitored.</p>
 </body>
 </html>
 """
