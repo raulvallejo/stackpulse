@@ -23,10 +23,10 @@ def send_digest(digest: str, recipient: str) -> bool:
 
         # Convert sources list to inline paragraph
         digest = re.sub(
-            r'(Sources monitored this week:)\s*\n+((?:- .+\n?)+)',
-            lambda m: m.group(1) + ' ' + ' · '.join(
+            r'Sources monitored this week:\*?\*?\s*\n+((?:- .+\n?)+)',
+            lambda m: 'Sources monitored this week: ' + ' · '.join(
                 item.lstrip('- ').strip()
-                for item in m.group(2).strip().split('\n') if item.strip()
+                for item in m.group(1).strip().split('\n') if item.strip()
             ) + '\n',
             digest
         )
