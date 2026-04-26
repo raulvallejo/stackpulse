@@ -23,27 +23,31 @@ def send_digest(digest: str, recipient: str) -> bool:
 
         # Convert sources list to inline paragraph
         digest = re.sub(
-            r'Sources monitored this week:\n((?:- .+\n?)+)',
-            lambda m: 'Sources monitored this week: ' + ' · '.join(
-                item.strip('- ').strip() for item in m.group(1).strip().split('\n') if item.strip()
-            ),
+            r'(Sources monitored this week:)\s*\n+((?:- .+\n?)+)',
+            lambda m: m.group(1) + ' ' + ' · '.join(
+                item.lstrip('- ').strip()
+                for item in m.group(2).strip().split('\n') if item.strip()
+            ) + '\n',
             digest
         )
 
         # Convert markdown to HTML
         html_body = markdown.markdown(digest, extensions=['extra', 'nl2br'])
 
-        # Wrap title in large heading style
+        # Style the title
         html_body = re.sub(
             r'<p>(Your Weekly Dev Stack Digest[^<]+)</p>',
-            r'<h1 style="font-size:28px;font-weight:bold;color:#1a1a2e;margin-bottom:8px;">\1</h1>',
+            r'<h1 style="font-size:28px;font-weight:700;color:#1a1a2e;margin-bottom:4px;margin-top:0;">\1</h1>',
             html_body,
             count=1
         )
 
+        # Add horizontal rules between h2 sections
+        html_body = html_body.replace('<h2>', '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;"><h2 style="color:#1a1a2e;font-size:16px;font-weight:700;margin-bottom:8px;">')
+
         html = f"""
 <html>
-<body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333 line-height: 1.6;">
+<body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6;">
 {html_body}
 </body>
 </html>
