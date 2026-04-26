@@ -165,6 +165,7 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 | v1.1 ✅ | Observability depth: quality score as OPIK feedback score, quality breakdown metadata, token usage + cost tracking, sources stats |
 | v1.3 ✅ | Guardrails: input validation (source reachability), output validation (empty digest, quality threshold, hallucination check) |
 | v1.4 ✅ | Memory: Supabase sent_updates table, deduplication of non-breaking updates, breaking changes always resurface |
+| v1.5 ✅ | Breaking Change Agent: daily cron (0 9 * * *), Groq classification + summarization, keyword pre-filter, Supabase breaking_change_alerts table, immediate email alerts |
 | v1.2 | Human-in-the-loop review for breaking changes |
 | v2 | Multi-user, Supabase auth, sign-up form |
 

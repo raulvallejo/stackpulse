@@ -54,7 +54,7 @@ Orchestrator
 | v1.2 | Evals — LLM-as-judge rubrics in OPIK, baseline scores, regression detection |
 | v1.3 ✅ | Guardrails — input validation (source reachability), output validation (empty digest, quality threshold, hallucination check) |
 | v1.4 ✅ | Memory — Supabase sent_updates table, deduplication of non-breaking updates, breaking changes always resurface |
-| v1.5 | Human-in-the-loop — breaking changes trigger immediate alert, LangGraph interrupt pattern |
+| v1.5 ✅ | Breaking Change Agent — daily cron, Groq classification + summarization, keyword pre-filter, Supabase alerts table, immediate email |
 | v2 | Multi-user — Supabase auth, sign-up form, per-user source configuration, per-user digest personalization |
 | v3 | Full product — dashboard, digest history, source management UI |
 
