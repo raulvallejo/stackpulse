@@ -164,6 +164,7 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 | v1 ✅ | Core pipeline, OPIK tracing, Resend email, Render Cron Job |
 | v1.1 ✅ | Observability depth: quality score as OPIK feedback score, quality breakdown metadata, token usage + cost tracking, sources stats |
 | v1.3 ✅ | Guardrails: input validation (source reachability), output validation (empty digest, quality threshold, hallucination check) |
+| v1.4 ✅ | Memory: Supabase sent_updates table, deduplication of non-breaking updates, breaking changes always resurface |
 | v1.2 | Human-in-the-loop review for breaking changes |
 | v2 | Multi-user, Supabase auth, sign-up form |
 
@@ -223,6 +224,12 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 ### Guardrails
 - Input guardrail uses HEAD requests to validate source URLs. RSS feeds may fail HEAD requests but still work for fetching — this produces false positive "unreachable" warnings. These are warnings only, not blocks — pipeline continues correctly.
 - Output guardrail delegates the send decision entirely — remove the old `should_send` state check from `send_email` node or it will conflict.
+
+### Supabase / Memory
+- Supabase requires the secret key (`sb_secret_...`) for backend inserts — publishable key returns 401 on writes due to RLS
+- `store_sent_updates` expects `source_results` structure: `list[{"source": str, "filtered_updates": list[dict]}]` — not flat update dicts
+- Memory query runs BEFORE storing — first run always finds 0 previously sent URLs, second run finds previous updates. This is correct behavior.
+- Delete empty rows after fixing schema issues: `DELETE FROM sent_updates WHERE title = '' OR title IS NULL`
 
 ### Environment Variables
 - Always use `os.environ.get()` not `os.environ[]` to prevent crashes on missing vars
