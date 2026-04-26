@@ -163,6 +163,7 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 |---|---|
 | v1 ✅ | Core pipeline, OPIK tracing, Resend email, Render Cron Job |
 | v1.1 ✅ | Observability depth: quality score as OPIK feedback score, quality breakdown metadata, token usage + cost tracking, sources stats |
+| v1.3 ✅ | Guardrails: input validation (source reachability), output validation (empty digest, quality threshold, hallucination check) |
 | v1.2 | Human-in-the-loop review for breaking changes |
 | v2 | Multi-user, Supabase auth, sign-up form |
 
@@ -218,6 +219,10 @@ Never commit API keys. Use `.env` locally and Render environment variables in pr
 ### MCP SSE Transport
 - Use `mcp.sse_app()` with Starlette wrapper for remote MCP servers
 - `mcp-remote` config needs `timeout: 30000` to handle cold start delays
+
+### Guardrails
+- Input guardrail uses HEAD requests to validate source URLs. RSS feeds may fail HEAD requests but still work for fetching — this produces false positive "unreachable" warnings. These are warnings only, not blocks — pipeline continues correctly.
+- Output guardrail delegates the send decision entirely — remove the old `should_send` state check from `send_email` node or it will conflict.
 
 ### Environment Variables
 - Always use `os.environ.get()` not `os.environ[]` to prevent crashes on missing vars
