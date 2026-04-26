@@ -13,6 +13,8 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from agents.fetcher import SourceAgentState, source_agent
+from guardrails.input_guardrails import validate_sources, check_minimum_sources
+from guardrails.output_guardrails import validate_digest, log_guardrail_result
 from mailer.sender import send_digest
 from sources.sources import get_sources
 
@@ -53,6 +55,11 @@ def load_config(state: OrchestratorState) -> OrchestratorState:
     state["sources"] = get_sources()
     state["user_interests"] = os.environ.get("USER_INTERESTS", "")
     state["recipient_email"] = os.environ.get("RECIPIENT_EMAIL", "")
+    validation = validate_sources(state["sources"])
+    if not check_minimum_sources(validation, minimum=3):
+        print(f"WARNING: Only {validation['valid_count']} sources reachable")
+    if validation["invalid"]:
+        print(f"Unreachable sources: {[s['source'] for s in validation['invalid']]}")
     return state
 
 
@@ -130,9 +137,17 @@ def score_digest(state: OrchestratorState) -> OrchestratorState:
 
 @_safe_track
 def send_email(state: OrchestratorState) -> OrchestratorState:
-    if not state["should_send"]:
-        logger.info("Digest score %.2f below threshold — email not sent.", state["quality_score"])
+    guardrail_result = validate_digest(
+        digest=state.get("digest", ""),
+        quality_score=state.get("quality_score", 0.0),
+        source_results=state.get("source_results", [])
+    )
+    log_guardrail_result(guardrail_result)
+
+    if not guardrail_result["should_send"]:
+        print(f"Email blocked by guardrails: {guardrail_result['reasons_blocked']}")
         return state
+
     send_digest(digest=state["digest"], recipient=state["recipient_email"])
     return state
 
