@@ -16,6 +16,7 @@ from agents.fetcher import SourceAgentState, source_agent
 from guardrails.input_guardrails import validate_sources, check_minimum_sources
 from guardrails.output_guardrails import validate_digest, log_guardrail_result
 from mailer.sender import send_digest
+from memory.memory import store_sent_updates, get_previously_sent, filter_already_sent
 from sources.sources import get_sources
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -87,6 +88,15 @@ def run_source_agent(state: SourceAgentState) -> dict:
     }
 
 
+@_safe_track(name="apply_memory")
+def apply_memory(state: OrchestratorState) -> OrchestratorState:
+    user_email = state.get("recipient_email", "")
+    previously_sent = get_previously_sent(user_email, days=7)
+    filtered = filter_already_sent(state["source_results"], previously_sent)
+    state["source_results"] = filtered
+    return state
+
+
 @_safe_track
 def synthesize(state: OrchestratorState) -> OrchestratorState:
     filtered = {r["source"]: r["filtered_updates"] for r in state["source_results"]}
@@ -149,19 +159,22 @@ def send_email(state: OrchestratorState) -> OrchestratorState:
         return state
 
     send_digest(digest=state["digest"], recipient=state["recipient_email"])
+    store_sent_updates(state["source_results"], state.get("recipient_email", ""))
     return state
 
 
 _graph = StateGraph(OrchestratorState)
 _graph.add_node("load_config", load_config)
 _graph.add_node("run_source_agent", run_source_agent)
+_graph.add_node("apply_memory", apply_memory)
 _graph.add_node("synthesize", synthesize)
 _graph.add_node("score_digest", score_digest)
 _graph.add_node("send_email", send_email)
 
 _graph.add_edge(START, "load_config")
 _graph.add_conditional_edges("load_config", dispatch_sources, ["run_source_agent"])
-_graph.add_edge("run_source_agent", "synthesize")
+_graph.add_edge("run_source_agent", "apply_memory")
+_graph.add_edge("apply_memory", "synthesize")
 _graph.add_edge("synthesize", "score_digest")
 _graph.add_edge("score_digest", "send_email")
 _graph.add_edge("send_email", END)
