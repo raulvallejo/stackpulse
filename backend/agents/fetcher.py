@@ -7,6 +7,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
+from urllib.parse import urlparse
 
 import time
 import threading
@@ -120,21 +121,65 @@ def _fetch_github(source: dict) -> list[dict]:
 
 
 def _fetch_changelog(source: dict) -> list[dict]:
-    response = requests.get(source["changelog_url"], timeout=15)
-    response.raise_for_status()
+    changelog_url = source.get("changelog_url") or source.get("website", "")
+    if not changelog_url:
+        return []
 
-    soup = BeautifulSoup(response.text, "html.parser")
-    main = soup.find("main") or soup.find("article") or soup.body
-    text = main.get_text(separator="\n", strip=True) if main else ""
-    truncated = text[:_CHANGELOG_MAX_CHARS]
+    if not changelog_url.startswith("http"):
+        changelog_url = "https://" + changelog_url
 
-    return [{
-        "source": source["name"],
-        "title": f"{source['name']} Changelog",
-        "content": truncated,
-        "url": source["changelog_url"],
-        "published": None,
-    }]
+    parsed = urlparse(changelog_url)
+    root = f"{parsed.scheme}://{parsed.netloc}"
+
+    urls_to_try = [changelog_url]
+
+    if parsed.path in ("", "/"):
+        urls_to_try += [
+            root + "/changelog",
+            root + "/release-notes",
+            root + "/releases",
+            root + "/updates",
+            root + "/blog",
+            root + "/whats-new",
+        ]
+    else:
+        urls_to_try.append(root)
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; DevStackPulse/1.0; +https://devstackpulse.com)"
+    }
+
+    for url in urls_to_try:
+        try:
+            resp = requests.get(url, timeout=10, headers=headers)
+            if resp.status_code in (401, 403):
+                continue
+            resp.raise_for_status()
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            content = None
+            for tag in ["main", "article", "body"]:
+                el = soup.find(tag)
+                if el:
+                    content = el.get_text(separator="\n", strip=True)
+                    break
+
+            if not content or len(content.strip()) < 100:
+                continue
+
+            return [{
+                "source": source["name"],
+                "title": f"{source['name']} Changelog",
+                "content": content[:_CHANGELOG_MAX_CHARS],
+                "url": url,
+                "published": None,
+            }]
+
+        except Exception as exc:
+            logger.warning("Changelog fetch failed for %s at %s: %s", source.get("name", url), url, exc)
+            continue
+
+    return []
 
 
 @_safe_track
@@ -229,7 +274,15 @@ def filter_source_node(state: SourceAgentState) -> SourceAgentState:
                 if raw.startswith("json"):
                     raw = raw[4:]
             raw = raw.strip()
-        state["filtered_updates"] = json.loads(raw)
+        try:
+            filtered = json.loads(raw)
+        except json.JSONDecodeError:
+            try:
+                raw_fixed = re.sub(r',(\s*[}\]])', r'\1', raw)
+                filtered = json.loads(raw_fixed)
+            except json.JSONDecodeError:
+                filtered = []
+        state["filtered_updates"] = filtered
     except Exception as exc:
         logger.warning("filter_source_node failed for %s: %s", state["source"].get("name", "?"), exc)
         state["filtered_updates"] = []

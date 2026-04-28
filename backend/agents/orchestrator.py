@@ -17,7 +17,6 @@ from guardrails.input_guardrails import validate_sources, check_minimum_sources
 from guardrails.output_guardrails import validate_digest, log_guardrail_result
 from mailer.sender import send_digest
 from memory.memory import store_sent_updates, get_previously_sent, filter_already_sent
-from sources.sources import get_sources
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -53,12 +52,15 @@ class OrchestratorState(TypedDict):
 
 @_safe_track
 def load_config(state: OrchestratorState) -> OrchestratorState:
-    state["sources"] = get_sources()
-    state["user_interests"] = os.environ.get("USER_INTERESTS", "")
-    state["recipient_email"] = os.environ.get("RECIPIENT_EMAIL", "")
+    if not state.get("sources"):
+        raise ValueError("sources must be provided in state — not loaded from env")
+    if not state.get("user_interests"):
+        raise ValueError("user_interests must be provided in state — not loaded from env")
+    if not state.get("recipient_email"):
+        raise ValueError("recipient_email must be provided in state — not loaded from env")
     validation = validate_sources(state["sources"])
-    if not check_minimum_sources(validation, minimum=3):
-        print(f"WARNING: Only {validation['valid_count']} sources reachable")
+    if not check_minimum_sources(validation, minimum=1):
+        print(f"WARNING: Only {validation['valid_count']} sources reachable — minimum required is 1")
     if validation["invalid"]:
         print(f"Unreachable sources: {[s['source'] for s in validation['invalid']]}")
     return state
