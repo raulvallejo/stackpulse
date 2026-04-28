@@ -70,29 +70,36 @@ def summarize_breaking_change(title: str, content: str, source: str) -> str:
         return re.sub(r'[#*`\[\]_]', '', content[:200]).strip()
 
 
-def send_breaking_change_email(update: dict, source_name: str, recipient: str, summary: str = "") -> bool:
+def send_breaking_change_email(alerts: list[dict], recipient_email: str) -> bool:
     try:
         resend.api_key = os.environ.get("RESEND_API_KEY", "")
-        title = update.get("title", "")
-        url = update.get("url", "#")
+        count = len(alerts)
+        plural = "s" if count > 1 else ""
+        sections_html = ""
+        for alert in alerts:
+            sections_html += f"""
+  <div style="margin-bottom:32px;">
+    <h2 style="font-size:17px;font-weight:700;color:#dc2626;margin:0 0 6px 0;">⚠️ {alert['source_name']}</h2>
+    <p style="margin:0 0 6px 0;"><a href="{alert['url']}" style="color:#6366f1;font-weight:600;font-size:15px;">{alert['title']}</a></p>
+    <p style="margin:0;color:#333;font-size:14px;line-height:1.6;">{alert['summary']}</p>
+  </div>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px 0;">"""
         html = f"""<html>
 <body style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;color:#333;line-height:1.6;">
-  <h1 style="font-size:24px;font-weight:700;color:#1a1a2e;">StackPulse — Breaking Change Alert</h1>
-  <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0;">
-  <h2 style="font-size:18px;color:#dc2626;">⚠️ {source_name}</h2>
-  <p><a href="{url}" style="color:#6366f1;font-weight:600;">{title}</a></p>
-  <p style="color:#333;font-size:15px;">{summary}</p>
-  <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0 10px;">
-  <p style="font-size:12px;color:#9ca3af;text-align:center;">Sent by <strong>StackPulse</strong> · Your dev stack, monitored.</p>
+  <h1 style="font-size:22px;font-weight:700;color:#1a1a2e;margin-bottom:4px;">DevStackPulse — Breaking Change{plural} Detected</h1>
+  <p style="color:#6b7280;font-size:13px;margin:0 0 20px 0;">{count} breaking change{plural} found across your monitored sources.</p>
+  <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px 0;">
+  {sections_html}
+  <p style="font-size:12px;color:#9ca3af;text-align:center;margin-top:16px;">Sent by <strong>DevStackPulse</strong> · Your dev stack, monitored.</p>
 </body>
 </html>"""
         resend.Emails.send({
             "from": "StackPulse <onboarding@resend.dev>",
-            "to": [recipient],
-            "subject": f"⚠️ StackPulse Alert — Breaking Change in {source_name}",
+            "to": [recipient_email],
+            "subject": f"⚠️ DevStackPulse — {count} Breaking Change{plural} Detected",
             "html": html,
         })
-        logger.info("Breaking change alert sent to %s for %s", recipient, source_name)
+        logger.info("Consolidated breaking change alert sent to %s (%d alerts)", recipient_email, count)
         return True
     except Exception as e:
         logger.error("Failed to send breaking change email: %s", e)
@@ -102,7 +109,7 @@ def send_breaking_change_email(update: dict, source_name: str, recipient: str, s
 def run_breaking_change_check(sources: list[dict], user_email: str) -> int:
     already_alerted = get_already_alerted(user_email)
     alerted_urls = set(already_alerted)
-    new_alerts = 0
+    alerts_to_send = []
 
     for source in sources:
         source_name = source["name"]
@@ -147,14 +154,21 @@ def run_breaking_change_check(sources: list[dict], user_email: str) -> int:
                     continue
 
                 summary = summarize_breaking_change(update.get("title", ""), update.get("content", ""), source["name"])
-                sent = send_breaking_change_email(update, source["name"], user_email, summary=summary)
-                if sent:
-                    store_alert(user_email, source["name"], update.get("title", ""), url)
-                    alerted_urls.add(url)
-                    new_alerts += 1
-                    logger.info("Breaking change alert sent: %s — %s", source["name"], update.get("title", ""))
+                store_alert(user_email, source["name"], update.get("title", ""), url)
+                alerted_urls.add(url)
+                alerts_to_send.append({
+                    "source_name": source["name"],
+                    "title": update.get("title", ""),
+                    "summary": summary,
+                    "url": url,
+                    "severity": update.get("severity", "breaking"),
+                })
+                logger.info("Breaking change queued: %s — %s", source["name"], update.get("title", ""))
 
         except Exception as e:
             logger.error("Breaking change check failed for %s: %s", source.get("name", "?"), e)
 
-    return new_alerts
+    if alerts_to_send:
+        send_breaking_change_email(alerts_to_send, user_email)
+
+    return len(alerts_to_send)

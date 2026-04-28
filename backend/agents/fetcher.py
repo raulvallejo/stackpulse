@@ -204,7 +204,7 @@ def filter_source_node(state: SourceAgentState) -> SourceAgentState:
                 )
                 _groq_last_call_time = time.time()
             raw = groq_response.choices[0].message.content or ""
-match = re.search(r'\[.*\]', raw, re.DOTALL)
+            match = re.search(r'\[.*\]', raw, re.DOTALL)
             if match:
                 raw = match.group(0)
             else:
