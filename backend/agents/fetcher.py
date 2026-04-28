@@ -4,15 +4,18 @@ load_dotenv()
 import json
 import logging
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
 
+import time
 import threading
 
 import feedparser
 import opik
 import requests
 from bs4 import BeautifulSoup
+from groq import Groq
 from langchain_anthropic import ChatAnthropic
 from langgraph.graph import END, START, StateGraph
 
@@ -31,12 +34,17 @@ def _safe_track(*args, **kwargs):
         return noop
 
 
+USE_GROQ_FILTER = os.environ.get("USE_GROQ_FILTER", "true").lower() == "true"
+
 opik_client = opik.Opik()
 filter_prompt = opik_client.get_prompt(name="stackpulse-filter", project_name="stackpulse")
 
 llm = ChatAnthropic(model="claude-haiku-4-5-20251001", anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY", ""))
 
 _anthropic_semaphore = threading.Semaphore(5)
+_groq_lock = threading.Lock()
+_groq_last_call_time = 0.0
 
 
 class SourceAgentState(TypedDict):
@@ -183,17 +191,44 @@ def filter_source_node(state: SourceAgentState) -> SourceAgentState:
             user_interests=state["user_interests"],
         )
 
-        with _anthropic_semaphore:
-            response = llm.invoke(prompt_text)
-        raw = response.content
-        if isinstance(raw, list):
-            raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
-        raw = raw.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        raw = raw.strip()
+        if USE_GROQ_FILTER:
+            model_name = "llama-3.3-70b-versatile"
+            global _groq_last_call_time
+            with _groq_lock:
+                elapsed = time.time() - _groq_last_call_time
+                if elapsed < 13.0:
+                    time.sleep(13.0 - elapsed)
+                groq_response = groq_client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt_text}],
+                )
+                _groq_last_call_time = time.time()
+            raw = groq_response.choices[0].message.content or ""
+match = re.search(r'\[.*\]', raw, re.DOTALL)
+            if match:
+                raw = match.group(0)
+            else:
+                raw = "[]"
+        else:
+            model_name = "claude-haiku-4-5-20251001"
+            with _anthropic_semaphore:
+                response = llm.invoke(prompt_text)
+            raw = response.content
+            if isinstance(raw, list):
+                raw = raw[0].text if hasattr(raw[0], "text") else str(raw[0])
+
+        try:
+            opik.opik_context.update_current_span(metadata={"model": model_name})
+        except Exception:
+            pass
+
+        if not USE_GROQ_FILTER:
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+            raw = raw.strip()
         state["filtered_updates"] = json.loads(raw)
     except Exception as exc:
         logger.warning("filter_source_node failed for %s: %s", state["source"].get("name", "?"), exc)
