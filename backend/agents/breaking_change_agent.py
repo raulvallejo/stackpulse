@@ -94,7 +94,7 @@ def send_breaking_change_email(alerts: list[dict], recipient_email: str) -> bool
 </body>
 </html>"""
         resend.Emails.send({
-            "from": "StackPulse <onboarding@resend.dev>",
+            "from": "DevStackPulse <digest@devstackpulse.com>",
             "to": [recipient_email],
             "subject": f"⚠️ DevStackPulse — {count} Breaking Change{plural} Detected",
             "html": html,

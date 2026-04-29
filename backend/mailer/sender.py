@@ -55,7 +55,7 @@ def send_digest(digest: str, recipient: str) -> bool:
 </html>
 """
         resend.Emails.send({
-            "from": "StackPulse <onboarding@resend.dev>",
+            "from": "DevStackPulse <digest@devstackpulse.com>",
             "to": [recipient],
             "subject": _SUBJECT,
             "html": html,
