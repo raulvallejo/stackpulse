@@ -43,6 +43,7 @@ class OrchestratorState(TypedDict):
     sources: list[dict]
     user_interests: str
     recipient_email: str
+    plan: str
     source_results: Annotated[list[dict], operator.add]
     digest: str
     quality_score: float
@@ -160,7 +161,7 @@ def send_email(state: OrchestratorState) -> OrchestratorState:
         print(f"Email blocked by guardrails: {guardrail_result['reasons_blocked']}")
         return state
 
-    send_digest(digest=state["digest"], recipient=state["recipient_email"])
+    send_digest(digest=state["digest"], recipient=state["recipient_email"], plan=state.get("plan", "free"))
     store_sent_updates(state["source_results"], state.get("recipient_email", ""))
     return state
 

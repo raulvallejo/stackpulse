@@ -81,6 +81,7 @@ def main():
                 "sources": user_sources,
                 "user_interests": user_interests,
                 "recipient_email": user_email,
+                "plan": plan,
                 "source_results": [],
                 "digest": "",
                 "quality_score": 0.0,

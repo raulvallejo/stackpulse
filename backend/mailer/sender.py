@@ -8,10 +8,10 @@ import resend
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
-_SUBJECT = "StackPulse — Your Weekly Dev Stack Digest"
+_SUBJECT = "DevStackPulse — Your Weekly Dev Stack Digest"
 
 
-def send_digest(digest: str, recipient: str) -> bool:
+def send_digest(digest: str, recipient: str, plan: str = "free") -> bool:
     try:
         resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
@@ -45,12 +45,22 @@ def send_digest(digest: str, recipient: str) -> bool:
         # Add horizontal rules between h2 sections
         html_body = html_body.replace('<h2>', '<hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;"><h2 style="color:#1a1a2e;font-size:16px;font-weight:700;margin-bottom:8px;">')
 
+        upgrade_section = ""
+        if plan == "free":
+            upgrade_section = """
+<div style="border:2px solid #0d9488;border-radius:8px;padding:16px 20px;margin:24px 0;background:#f0fdfa;">
+  <p style="margin:0;font-size:14px;color:#0f766e;">🚀 <strong>Upgrade to Pro</strong> — Monitor up to 15 sources and receive instant breaking change alerts.</p>
+  <p style="margin:8px 0 0 0;font-size:13px;"><a href="https://www.devstackpulse.com/pricing" style="color:#0d9488;font-weight:600;">Upgrade now →</a></p>
+</div>"""
+
         html = f"""
 <html>
 <body style="font-family: Arial, sans-serif; max-width: 700px; margin: 0 auto; padding: 20px; color: #333; line-height: 1.6;">
 {html_body}
+{upgrade_section}
 <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0 10px;">
-<p style="font-size:12px;color:#9ca3af;text-align:center;margin:0;">Sent by <strong>StackPulse</strong> · Your dev stack, monitored.</p>
+<p style="font-size:12px;color:#9ca3af;text-align:center;margin:0 0 6px 0;">Sent by <strong>DevStackPulse</strong> · Your dev stack, monitored.</p>
+<p style="font-size:12px;color:#9ca3af;text-align:center;margin:0;"><a href="https://www.devstackpulse.com" style="color:#9ca3af;">Visit DevStackPulse to manage your sources and interests.</a></p>
 </body>
 </html>
 """
